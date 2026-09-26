@@ -1,0 +1,1 @@
+@extends('layouts.app') @section('content')<h2 class="mb-4">دەستکاریکردنی شۆفێر</h2><div class="card"><div class="card-body">@include('admin.drivers.form',['action'=>route('drivers.update',$driver),'method'=>'PUT','driver'=>$driver])</div></div>@endsection

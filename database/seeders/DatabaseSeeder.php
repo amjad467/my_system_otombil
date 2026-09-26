@@ -1,0 +1,4 @@
+<?php
+namespace Database\Seeders;
+use Illuminate\Database\Seeder; use App\Models\User; use App\Models\Vehicle; use Illuminate\Support\Facades\Hash;
+class DatabaseSeeder extends Seeder { public function run(): void { $admin=User::updateOrCreate(['email'=>'admin@example.com'],['name'=>'بەڕێوەبەر','phone'=>'','role'=>'admin','active'=>true,'password'=>Hash::make('Admin@12345')]); User::updateOrCreate(['email'=>'driver@example.com'],['name'=>'شۆفێر نموونە','phone'=>'','role'=>'driver','active'=>true,'password'=>Hash::make('Driver@12345')]); Vehicle::updateOrCreate(['number'=>'SUL-1001'],['type'=>'تۆیۆتا','model'=>'Corolla','description'=>'ئۆتۆمبێلی نموونە','active'=>true]); Vehicle::updateOrCreate(['number'=>'SUL-1002'],['type'=>'تۆیۆتا','model'=>'Camry','description'=>'ئۆتۆمبێلی نموونە','active'=>true]); } }

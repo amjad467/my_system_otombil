@@ -1,0 +1,1 @@
+@extends('layouts.app') @section('content')<h2 class="mb-4">دەستکاریکردنی ئۆتۆمبێل</h2><div class="card"><div class="card-body">@include('admin.vehicles.form',['action'=>route('vehicles.update',$vehicle),'method'=>'PUT','vehicle'=>$vehicle])</div></div>@endsection
