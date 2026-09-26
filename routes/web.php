@@ -7,6 +7,9 @@ use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\MovementController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\BackupController; // یان ئەگەر کۆنترۆڵەری تر بەکاردێنیت
+
+Route::get('/backups', [BackupController::class, 'index'])->name('backups.index');
 Route::redirect('/','/dashboard');
 Route::middleware('guest')->group(function(){Route::get('/login',[AuthController::class,'show'])->name('login'); Route::post('/login',[AuthController::class,'login'])->name('login.store');});
 Route::middleware('auth')->group(function(){

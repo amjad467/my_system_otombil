@@ -24,3 +24,7 @@
 </ul>
 </div>
 @else<a class="text-white text-decoration-none" href="{{ route('driver.home') }}">گەشتەکانم</a><a class="text-white text-decoration-none" href="{{ route('driver.departure') }}">دەرچوون</a>@endif</div><span>{{ auth()->user()->name }}</span><form method="POST" action="{{ route('logout') }}">@csrf<button class="btn btn-sm btn-outline-light">دەرچوون</button></form></div>@endauth</div></nav><main class="container pb-5">@if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif @if(session('error'))<div class="alert alert-danger">{{ session('error') }}</div>@endif @if($errors->any())<div class="alert alert-danger"><ul class="mb-0">@foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul></div>@endif @yield('content')</main><script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script></body></html>
+<!-- پێشتر ئەمە بوو: -->
+<a class="text-white text-decoration-none" href="{{ route('backups.index') }}">باکئەپ</a>
+
+<!-- بیگۆڕە بۆ ناوی ڕاوتی ڕاستەقینەت لە web.php -->
