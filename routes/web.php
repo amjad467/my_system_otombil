@@ -11,14 +11,12 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\BackupController;
 use Illuminate\Support\Facades\DB;
 
-// ڕاوتی سەرەکی بۆ پشکنینی ڕاستەوخۆی دەیتابەیس
+// ڕاوتی سەرەکی: ئەگەر چووبێتە ژوورەوە دەچێتە Dashboard، ئەگەر نا دەچێتە Login
 Route::get('/', function () {
-    return response()->json([
-        'connection' => config('database.default'),
-        'database'   => DB::connection()->getDatabaseName(),
-    ]);
+    return redirect()->route('login');
 });
 
+// ڕاوتی تایبەت بۆ پشکنینی تەندروستی دەیتابەیس و بەستەرەکان
 Route::get('/check-db', function () {
     return response()->json([
         'connection' => config('database.default'),
