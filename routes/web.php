@@ -8,6 +8,7 @@ use App\Http\Controllers\MovementController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\BackupController; // یان ئەگەر کۆنترۆڵەری تر بەکاردێنیت
+use Illuminate\Support\Facades\DB; // بۆ پشکنینی دەیتابەیس
 
 Route::get('/backups', [BackupController::class, 'index'])->name('backups.index');
 Route::redirect('/','/dashboard');
@@ -30,4 +31,12 @@ Route::middleware('auth')->group(function(){
   Route::get('/reports',[ReportController::class,'index'])->name('reports.index');
   Route::get('/reports/csv',[ReportController::class,'csv'])->name('reports.csv');
  });
+});
+
+// ڕاوتی تایبەت بە پشکنینی دەیتابەیس
+Route::get('/check-db', function () {
+    return response()->json([
+        'connection' => config('database.default'),
+        'database'   => DB::connection()->getDatabaseName(),
+    ]);
 });
