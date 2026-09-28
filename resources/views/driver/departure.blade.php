@@ -1,99 +1,168 @@
-@extends('layouts.app') @section('content')
-<div class="row justify-content-center"><div class="col-lg-8"><div class="card"><div class="card-body p-4">
-<h2>🚗 تۆمارکردنی دەرچوون</h2>
-<p class="text-muted">کاتی دەرچوون بە شێوەی خۆکار تۆمار دەکرێت.</p>
+@extends('layouts.app')
 
-@if(!$isAdmin && $hasOpenTrip)
-    <div class="alert alert-danger">
-        <strong>⚠ ئەم شۆفێرە هێشتا نەگەڕاوەتەوە و ناتوانێت دەرچوونی نوێ تۆمار بکات.</strong>
-        <br>تکایە سەرەتا گەشتی کراوەکەت تەواو بکە.
-        <a href="{{ route('driver.active') }}" class="btn btn-sm btn-warning mt-2">بینینی گەشتی کراوە</a>
+@section('content')
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-8">
+        <div class="card border-0 shadow-sm p-4">
+            <div class="mb-4 pb-3 border-bottom d-flex align-items-center justify-content-between">
+                <div>
+                    <h3 class="fw-bold mb-1">🚗 تۆمارکردنی دەرچوونی ئۆتۆمبێل</h3>
+                    <p class="text-muted small mb-0">کاتی دەرچوون بە شێوەی خۆکار لە لایەن سیستەمەوە تۆمار دەکرێت</p>
+                </div>
+                <span class="fs-1 text-primary"><i class="bi bi-geo-alt"></i></span>
+            </div>
+
+            @if(!$isAdmin && $hasOpenTrip)
+                <div class="alert alert-warning border-2 rounded-4 p-4 mb-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <i class="bi bi-exclamation-circle-fill fs-1 text-warning"></i>
+                        <div>
+                            <h5 class="fw-bold mb-1">گەشتێکی کراوەت هەیە!</h5>
+                            <p class="small mb-2">تۆ لە ئێستادا گەشتێکی کراوەت هەیە و ناتوانیت دەرچوونی نوێ تۆمار بکەیت تا ئەو کاتەی گەڕانەوەی ئۆتۆمبێلی پێشوو تۆمار دەکەیت.</p>
+                            <a href="{{ route('driver.active') }}" class="btn btn-warning fw-bold">
+                                <i class="bi bi-arrow-left-circle me-1"></i> چوون بۆ گەشتی ئێستام و گەڕانەوە
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            @elseif($vehicles->isEmpty())
+                <div class="alert alert-info rounded-4 p-4 text-center">
+                    <i class="bi bi-info-circle fs-1 d-block mb-2"></i>
+                    <h5 class="fw-bold">هیچ ئۆتۆمبێلێکی بەردەست نییە!</h5>
+                    <p class="small text-muted mb-0">هەموو ئۆتۆمبێلەکان لە دەرەوەن یان لە دۆخی چاککردنەوەدان.</p>
+                </div>
+            @else
+                <form method="POST" action="{{ route('driver.departure.store') }}" id="departureForm">
+                    @csrf
+
+                    {{-- Admin: Driver Selection & Override --}}
+                    @if($isAdmin)
+                    <div class="p-3 bg-body-tertiary rounded-4 mb-4 border">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-person-badge me-1"></i> هەڵبژاردنی شۆفێر (تایبەت بە بەڕێوەبەر)</h6>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">شۆفێری گەشت <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-lg @error('user_id') is-invalid @enderror" name="user_id" id="driverSelect" required>
+                                <option value="">شۆفێرێک هەڵبژێرە...</option>
+                                @foreach($drivers as $d)
+                                    <option value="{{ $d->id }}" data-status="{{ $d->trip_status }}" @selected(old('user_id') == $d->id)>
+                                        {{ $d->name }} 
+                                        @if($d->trip_status === 'لە دەرەوەیە')
+                                            — ⚠️ لە دەرەوەیە (پێویستی بە Override هەیە)
+                                        @else
+                                            — ✅ بەردەست
+                                        @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('user_id')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" name="override" value="1" id="overrideCheck">
+                            <label class="form-check-label fw-semibold" for="overrideCheck">
+                                <span class="text-danger fw-bold">تێپەڕاندنی ڕێساکان (Override):</span>
+                                ڕێگەدان بە دەرچوون تەنانەت ئەگەر شۆفێر یان ئۆتۆمبێل لە دەرەوە بێت
+                            </label>
+                            <div class="small text-muted">ئەم کردارە لە ناو تۆماری چاودێری (Audit Log) تۆمار دەکرێت.</div>
+                        </div>
+                    </div>
+                    @endif
+
+                    {{-- Vehicle Selection --}}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">ژمارەی ئۆتۆمبێل <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-lg @error('vehicle_id') is-invalid @enderror" id="vehicle_select" name="vehicle_id" required>
+                            <option value="">ئۆتۆمبێلێک هەڵبژێرە...</option>
+                            @foreach($vehicles as $v)
+                                @php 
+                                    $isOut = in_array($v->id, $outVehicleIds); 
+                                    $isMaint = $v->status === 'maintenance';
+                                @endphp
+                                <option value="{{ $v->id }}"
+                                        data-type="{{ $v->type }}"
+                                        data-model="{{ $v->model }}"
+                                        data-status="{{ $isOut ? 'out' : ($isMaint ? 'maintenance' : 'available') }}"
+                                        @selected(old('vehicle_id') == $v->id)>
+                                    {{ $v->number }} ({{ $v->type }})
+                                    @if($isOut)
+                                        — ⚠️ لە دەرەوەیە
+                                    @elseif($isMaint)
+                                        — 🔧 لە چاککردنەوەدایە
+                                    @else
+                                        — ✅ بەردەست
+                                    @endif
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('vehicle_id')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    {{-- Vehicle Info Auto-Display --}}
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">جۆر و مۆدێلی دیاریکراو</label>
+                        <input type="text" class="form-control bg-body-tertiary" id="vehicle_info_display" readonly placeholder="خۆکار دیاری دەکرێت...">
+                    </div>
+
+                    {{-- Destination --}}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">مەبەست / شوێنی چوون <span class="text-danger">*</span></label>
+                        <input class="form-control form-control-lg @error('destination') is-invalid @enderror" name="destination" required placeholder="وەک: بەغدا، هەولێر، پشکنینی گومرگ..." value="{{ old('destination') }}">
+                        @error('destination')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    {{-- Purpose --}}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">هۆکاری گەشت</label>
+                        <textarea class="form-control @error('purpose') is-invalid @enderror" name="purpose" rows="2" placeholder="بۆچی دەچیت؟ ئەرکی کار...">{{ old('purpose') }}</textarea>
+                        @error('purpose')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    {{-- Notes --}}
+                    <div class="mb-4">
+                        <label class="form-label small text-muted">تێبینی زیاتر (ئارەزوومەندانە)</label>
+                        <textarea class="form-control" name="notes" rows="2" placeholder="کێ لەگەڵت دەڕوات؟ کەلوپەل یان هەر زانیارییەکی تر...">{{ old('notes') }}</textarea>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg py-3 shadow">
+                            <i class="bi bi-send-check me-1"></i> تۆمارکردنی دەرچوون ئێستا
+                        </button>
+                    </div>
+                </form>
+            @endif
+        </div>
     </div>
-@elseif($vehicles->isEmpty())
-    <div class="alert alert-warning">هیچ ئۆتۆمبێلێکی بەردەست نییە.</div>
-@else
-<form method="POST" action="{{ route('driver.departure.store') }}">@csrf
-
-{{-- Admin: هەڵبژاردنی شۆفێر --}}
-@if($isAdmin)
-<div class="mb-3">
-    <label class="form-label fw-bold">شۆفێر</label>
-    <select class="form-select form-select-lg" name="user_id" required>
-        <option value="">هەڵبژێرە...</option>
-        @foreach($drivers as $d)
-            <option value="{{ $d->id }}"
-                {{ $d->trip_status === 'لە دەرەوەیە' ? 'class=text-danger' : '' }}>
-                {{ $d->name }}
-                @if($d->trip_status === 'لە دەرەوەیە')
-                    — ⚠ لە دەرەوەیە
-                @else
-                    — ✅ بەردەست
-                @endif
-            </option>
-        @endforeach
-    </select>
-    <div class="form-text">شۆفێرانی (⚠) هێشتا نەگەڕاونەتەوە. بۆ هەڵبژاردنیان Override پێویستە.</div>
-</div>
-<div class="mb-3 form-check">
-    <input type="checkbox" class="form-check-input" name="override" value="1" id="overrideCheck">
-    <label class="form-check-label" for="overrideCheck">Override — تێپەڕاندنی ڕێسا (بۆ ئەدمین)</label>
-</div>
-@endif
-
-{{-- هەڵبژاردنی ئۆتۆمبێل --}}
-<div class="mb-3">
-    <label class="form-label fw-bold">ژمارەی ئۆتۆمبێل</label>
-    <select class="form-select form-select-lg" id="vehicle_select" name="vehicle_id" required>
-        <option value="">هەڵبژێرە...</option>
-        @foreach($vehicles as $v)
-            @php $isOut = in_array($v->id, $outVehicleIds); @endphp
-            <option value="{{ $v->id }}"
-                    data-type="{{ $v->type }}"
-                    data-model="{{ $v->model }}"
-                    {{ $isOut ? 'class=text-danger' : '' }}>
-                {{ $v->number }}
-                @if($isOut)
-                    — ⚠ لە دەرەوەیە
-                @else
-                    — ✅ بەردەست
-                @endif
-            </option>
-        @endforeach
-    </select>
 </div>
 
-{{-- جۆری ئۆتۆمبێل (خۆکار) --}}
-<div class="mb-3">
-    <label class="form-label">جۆری ئۆتۆمبێل</label>
-    <input type="text" class="form-control form-control-lg" id="vehicle_type_display" readonly placeholder="بەدوای هەڵبژاردنی ژمارە خۆکار پڕدەبێتەوە">
-</div>
-
-<div class="mb-3">
-    <label class="form-label fw-bold">بۆ کوێ دەچیت؟</label>
-    <input class="form-control form-control-lg" name="destination" required placeholder="وەک: بەغدا، گومرگ، ناوچەی ..." value="{{ old('destination') }}">
-</div>
-
-<div class="mb-3">
-    <label class="form-label">هۆکاری گەشت</label>
-    <textarea class="form-control" name="purpose" rows="3" placeholder="هۆکاری چوون...">{{ old('purpose') }}</textarea>
-</div>
-
-<div class="mb-3">
-    <label class="form-label">تێبینی</label>
-    <textarea class="form-control" name="notes" rows="2">{{ old('notes') }}</textarea>
-</div>
-
-<button class="btn btn-primary w-100 mobile-action">تۆمارکردنی دەرچوون</button>
-</form>
-
+@push('scripts')
 <script>
-document.getElementById('vehicle_select').addEventListener('change', function () {
-    var opt = this.options[this.selectedIndex];
-    var type = opt.getAttribute('data-type') || '';
-    var model = opt.getAttribute('data-model') || '';
-    document.getElementById('vehicle_type_display').value = opt.value ? (type + (model ? ' — ' + model : '')) : '';
-});
+    const vehicleSelect = document.getElementById('vehicle_select');
+    const vehicleDisplay = document.getElementById('vehicle_info_display');
+
+    if (vehicleSelect && vehicleDisplay) {
+        function updateVehicleInfo() {
+            const opt = vehicleSelect.options[vehicleSelect.selectedIndex];
+            if (opt && opt.value) {
+                const type = opt.getAttribute('data-type') || '';
+                const model = opt.getAttribute('data-model') || '';
+                vehicleDisplay.value = type + (model ? ' — ' + model : '');
+            } else {
+                vehicleDisplay.value = '';
+            }
+        }
+
+        vehicleSelect.addEventListener('change', updateVehicleInfo);
+        updateVehicleInfo();
+    }
 </script>
-@endif
-</div></div></div></div>
+@endpush
 @endsection

@@ -1,23 +1,48 @@
 <?php
+
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
+use App\Models\Setting;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleMovement;
 use App\Services\TripService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class MovementController extends Controller
 {
-    public function __construct(private TripService $tripService) {}
+    public function __construct(private TripService $tripService)
+    {
+    }
 
     /** Driver: show own trip history */
-    public function mine()
+    public function mine(Request $request)
     {
-        $movements = VehicleMovement::with(['vehicle'])
+        $query = VehicleMovement::with(['vehicle'])
             ->where('user_id', auth()->id())
-            ->latest('departure_time')
-            ->paginate(20);
+            ->latest('departure_time');
+
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->where('destination', 'like', "%{$s}%")
+                  ->orWhere('purpose', 'like', "%{$s}%")
+                  ->orWhereHas('vehicle', fn($v) => $v->where('number', 'like', "%{$s}%"));
+            });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $movements = $query->paginate(20)->withQueryString();
+
+        if ($request->ajax()) {
+            return view('driver.partials.history_rows', compact('movements'))->render();
+        }
+
         return view('driver.history', compact('movements'));
     }
 
@@ -28,6 +53,7 @@ class MovementController extends Controller
             ->where('user_id', auth()->id())
             ->where('status', 'out')
             ->first();
+
         return view('driver.active', compact('movement'));
     }
 
@@ -38,16 +64,21 @@ class MovementController extends Controller
         $isAdmin = $user->isAdmin();
 
         // Get all active vehicles
-        $allVehicles = Vehicle::where('active', true)->orderBy('number')->get();
+        $allVehicles = Vehicle::where('active', true)
+            ->where('status', '!=', 'inactive')
+            ->orderBy('number')
+            ->get();
 
         // Get IDs of vehicles currently out
         $outVehicleIds = VehicleMovement::where('status', 'out')->pluck('vehicle_id')->toArray();
 
-        // For drivers: only available vehicles. For admin: all with status indicator
+        // For regular drivers: only available (not out & not in maintenance)
         if ($isAdmin) {
             $vehicles = $allVehicles;
         } else {
-            $vehicles = $allVehicles->filter(fn($v) => !in_array($v->id, $outVehicleIds));
+            $vehicles = $allVehicles->filter(function ($v) use ($outVehicleIds) {
+                return !in_array($v->id, $outVehicleIds) && $v->status !== 'maintenance';
+            });
         }
 
         // Get drivers list for admin
@@ -91,22 +122,42 @@ class MovementController extends Controller
             $data['user_id'] = $user->id;
         }
 
-        $override = $isAdmin && (
-            $request->boolean('override') ||
-            !$this->tripService->canDriverDepart($data['user_id']) ||
-            !$this->tripService->isVehicleAvailable($data['vehicle_id'])
-        );
+        $isDriverBusy = !$this->tripService->canDriverDepart($data['user_id']);
+        $isVehicleUnavailable = !$this->tripService->isVehicleAvailable($data['vehicle_id']);
+
+        $override = false;
+        if ($isAdmin && ($request->boolean('override') || $isDriverBusy || $isVehicleUnavailable)) {
+            $override = true;
+        }
+
+        if (!$isAdmin && ($isDriverBusy || $isVehicleUnavailable)) {
+            $msg = $isDriverBusy ? 'شۆفێر لە دەرەوەیە و ناتوانێت گەشتی نوێ دەستپێبکات.' : 'ئەم ئۆتۆمبێلە بەردەست نییە.';
+            return back()->withInput()->with('error', $msg);
+        }
 
         try {
-            $this->tripService->recordDeparture($data, $user, $override);
-            return redirect()->route('driver.active')->with('success', 'دەرچوون بە سەرکەوتوویی تۆمار کرا.');
+            $movement = $this->tripService->recordDeparture($data, $user, $override);
+
+            if ($request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'دەرچوون بە سەرکەوتوویی تۆمار کرا.',
+                    'redirect' => $isAdmin ? route('movements.index') : route('driver.active'),
+                ]);
+            }
+
+            return redirect()->route($isAdmin ? 'movements.index' : 'driver.active')
+                ->with('success', 'دەرچوون بە سەرکەوتوویی تۆمار کرا.');
         } catch (\Exception $e) {
+            if ($request->ajax()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
             return back()->withInput()->with('error', $e->getMessage());
         }
     }
 
     /** Record return */
-    public function returnVehicle(VehicleMovement $movement)
+    public function returnVehicle(Request $request, VehicleMovement $movement)
     {
         $user = auth()->user();
 
@@ -121,24 +172,79 @@ class MovementController extends Controller
 
         try {
             $this->tripService->recordReturn($movement, $user);
-            return redirect()->route('driver.home')->with('success', 'گەڕانەوە بە سەرکەوتوویی تۆمار کرا.');
+
+            if ($request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'گەڕانەوە بە سەرکەوتوویی تۆمار کرا.',
+                ]);
+            }
+
+            $redirectRoute = $user->isAdmin() ? 'movements.index' : 'driver.home';
+            return redirect()->route($redirectRoute)->with('success', 'گەڕانەوە بە سەرکەوتوویی تۆمار کرا.');
         } catch (\Exception $e) {
+            if ($request->ajax()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
             return back()->with('error', $e->getMessage());
         }
     }
 
-    /** Admin: view all movements */
-    public function adminIndex()
+    /** Admin: view all movements with filtering and live search */
+    public function adminIndex(Request $request)
     {
-        $movements = VehicleMovement::with(['vehicle', 'driver'])
-            ->latest('departure_time')
-            ->paginate(30);
+        $query = VehicleMovement::with(['vehicle', 'driver', 'overrideUser'])
+            ->latest('departure_time');
 
+        // Search text
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->where('destination', 'like', "%{$s}%")
+                  ->orWhere('purpose', 'like', "%{$s}%")
+                  ->orWhereHas('driver', fn($d) => $d->where('name', 'like', "%{$s}%"))
+                  ->orWhereHas('vehicle', fn($v) => $v->where('number', 'like', "%{$s}%")->orWhere('type', 'like', "%{$s}%"));
+            });
+        }
+
+        // Driver filter
+        if ($request->filled('driver_id')) {
+            $query->where('user_id', $request->driver_id);
+        }
+
+        // Vehicle filter
+        if ($request->filled('vehicle_id')) {
+            $query->where('vehicle_id', $request->vehicle_id);
+        }
+
+        // Status filter
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Date filter
+        if ($request->filled('date')) {
+            $query->whereDate('departure_time', $request->date);
+        }
+
+        $movements = $query->paginate(20)->withQueryString();
+
+        // Not returned / Live list
         $notReturned = VehicleMovement::with(['vehicle', 'driver'])
             ->where('status', 'out')
-            ->oldest('departure_time')
+            ->orderBy('departure_time', 'asc')
             ->get();
 
-        return view('admin.movements', compact('movements', 'notReturned'));
+        $drivers = User::where('role', 'driver')->orderBy('name')->get();
+        $vehicles = Vehicle::orderBy('number')->get();
+
+        $attentionHours = (float) Setting::get('attention_hours', 2);
+        $warningHours = (float) Setting::get('warning_hours', 4);
+
+        if ($request->ajax()) {
+            return view('admin.movements_table_partial', compact('movements', 'attentionHours', 'warningHours'))->render();
+        }
+
+        return view('admin.movements', compact('movements', 'notReturned', 'drivers', 'vehicles', 'attentionHours', 'warningHours'));
     }
 }
